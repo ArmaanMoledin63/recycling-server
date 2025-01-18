@@ -26,7 +26,7 @@ except Exception as e:
     print("Current directory contents:", os.listdir('.'))
     interpreter = None
 
-# Your actual categories
+# Categories matching your model's output
 CATEGORIES = {
     'Cardboard': {
         'instructions': [
@@ -118,19 +118,28 @@ def predict():
 
         if interpreter is None:
             print("Model not loaded, using fallback")
-            category = list(CATEGORIES.keys())[0]  # First category as fallback
+            category = list(CATEGORIES.keys())[0]
             confidence = 0.95
         else:
             print("Making prediction with model")
+            # Set the input tensor
             interpreter.set_tensor(input_details[0]['index'], image_array)
+            # Run inference
             interpreter.invoke()
+            # Get predictions
             predictions = interpreter.get_tensor(output_details[0]['index'])
             
+            # Print all predictions
+            all_categories = list(CATEGORIES.keys())
+            print("\nAll predictions:")
+            for i, conf in enumerate(predictions[0]):
+                print(f"{all_categories[i]}: {conf * 100:.2f}%")
+            
+            # Get the highest confidence prediction
             predicted_class = np.argmax(predictions[0])
             confidence = float(predictions[0][predicted_class])
-            category = list(CATEGORIES.keys())[predicted_class]
-        
-        print(f"Predicted: {category} with confidence: {confidence}")
+            category = all_categories[predicted_class]
+            print(f"\nFinal prediction: {category} with confidence: {confidence * 100:.2f}%")
         
         return jsonify({
             'success': True,
