@@ -3,74 +3,93 @@ from flask_cors import CORS
 import numpy as np
 from PIL import Image
 import io
+import tensorflow as tf
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-# Categories and their recycling instructions
+print("Starting server...")
+
+# Load the TFLite model
+try:
+    print("Attempting to load model...")
+    interpreter = tf.lite.Interpreter(model_path="recycling_model.tflite")
+    interpreter.allocate_tensors()
+    input_details = interpreter.get_input_details()
+    output_details = interpreter.get_output_details()
+    print("Model loaded successfully!")
+    print("Input details:", input_details)
+    print("Output details:", output_details)
+except Exception as e:
+    print(f"Error loading model: {str(e)}")
+    print("Current directory contents:", os.listdir('.'))
+    interpreter = None
+
+# Your actual categories
 CATEGORIES = {
-    'plastic': {
+    'Cardboard': {
         'instructions': [
-            'Rinse container thoroughly',
-            'Remove caps and labels',
-            'Check for recycling number (1-7)',
-            'Crush if possible to save space'
-        ],
-        'examples': 'Bottles, containers, packaging'
-    },
-    'paper': {
-        'instructions': [
+            'Flatten all boxes',
+            'Remove tape and staples',
             'Keep dry and clean',
-            'Remove any plastic wrapping',
-            'Flatten boxes',
-            'Remove any tape or staples'
+            'Bundle large boxes together'
         ],
-        'examples': 'Newspapers, cardboard, magazines'
+        'examples': 'Boxes, packaging, shipping containers'
     },
-    'metal': {
+    'Food_Waste': {
         'instructions': [
-            'Clean the item thoroughly',
-            'Remove any non-metal parts',
-            'Crush cans to save space',
-            'Check if item is magnetic (steel) or not (aluminum)'
+            'Remove any packaging',
+            'Collect in compost bin',
+            'Keep sealed to prevent odors',
+            'Avoid meat and dairy if home composting'
         ],
-        'examples': 'Cans, foil, bottle caps'
+        'examples': 'Fruit/vegetable scraps, coffee grounds, eggshells'
     },
-    'glass': {
+    'Glass': {
         'instructions': [
             'Rinse thoroughly',
             'Remove caps and lids',
-            'Separate by color if required',
-            'Do not break intentionally'
+            'Sort by color if required',
+            'Handle with care - do not break'
         ],
         'examples': 'Bottles, jars, containers'
     },
-    'organic': {
+    'Metal': {
         'instructions': [
-            'Remove any packaging',
-            'Cut large items into smaller pieces',
-            'Keep separate from non-organic waste',
-            'Compost if possible'
+            'Clean thoroughly',
+            'Remove labels if possible',
+            'Crush cans to save space',
+            'Separate aluminum and steel'
         ],
-        'examples': 'Food waste, garden waste, wood'
+        'examples': 'Cans, foil, bottle caps'
     },
-    'ewaste': {
+    'Paper': {
         'instructions': [
-            'Remove batteries if possible',
-            'Keep intact - do not break',
-            'Store in dry place',
-            'Take to designated e-waste center'
+            'Keep clean and dry',
+            'Remove plastic wrapping',
+            'Stack neatly',
+            'Avoid greasy or food-stained paper'
         ],
-        'examples': 'Electronics, batteries, cables'
+        'examples': 'Newspapers, magazines, office paper'
     },
-    'others': {
+    'Plastic': {
         'instructions': [
-            'Check local recycling guidelines',
-            'Consider if item can be reused',
-            'Separate different materials if possible',
+            'Rinse clean',
+            'Check recycling number',
+            'Remove caps and labels',
+            'Crush to save space'
+        ],
+        'examples': 'Bottles, containers, packaging'
+    },
+    'Other': {
+        'instructions': [
+            'Check local guidelines',
+            'Separate if multiple materials',
+            'Consider reuse options',
             'When in doubt, ask recycling center'
         ],
-        'examples': 'Mixed materials, unknown items'
+        'examples': 'Mixed materials, uncommon items'
     }
 }
 
@@ -89,20 +108,40 @@ def predict():
             })
 
         file = request.files['image']
-        print(f"Received file: {file.filename}")
+        print(f"Processing file: {file.filename}")
         
-        # For now, return test prediction (later will connect to your model)
-        category = 'plastic'  # This will be replaced with actual model prediction
+        # Process image
+        image = Image.open(io.BytesIO(file.read())).convert('RGB')
+        image = image.resize((299, 299))  # Xception input size
+        image_array = np.array(image, dtype=np.float32) / 255.0
+        image_array = np.expand_dims(image_array, axis=0)
+
+        if interpreter is None:
+            print("Model not loaded, using fallback")
+            category = list(CATEGORIES.keys())[0]  # First category as fallback
+            confidence = 0.95
+        else:
+            print("Making prediction with model")
+            interpreter.set_tensor(input_details[0]['index'], image_array)
+            interpreter.invoke()
+            predictions = interpreter.get_tensor(output_details[0]['index'])
+            
+            predicted_class = np.argmax(predictions[0])
+            confidence = float(predictions[0][predicted_class])
+            category = list(CATEGORIES.keys())[predicted_class]
+        
+        print(f"Predicted: {category} with confidence: {confidence}")
+        
         return jsonify({
             'success': True,
             'category': category,
-            'confidence': 0.95,
+            'confidence': confidence,
             'instructions': CATEGORIES[category]['instructions'],
             'examples': CATEGORIES[category]['examples']
         })
         
     except Exception as e:
-        print(f"Error: {str(e)}")
+        print(f"Error during prediction: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
