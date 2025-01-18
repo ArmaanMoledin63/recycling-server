@@ -1,147 +1,112 @@
-import React, { useState } from 'react';
-import { View, Image, StyleSheet, Text, TouchableOpacity, Alert } from 'react-native';
-import * as ImagePicker from 'expo-image-picker';
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import numpy as np
+from PIL import Image
+import io
 
-const API_URL = 'https://recycling-server.onrender.com';  // Replace with your actual URL
+app = Flask(__name__)
+CORS(app)
 
-export default function Camera() {
-  const [image, setImage] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-
-  const takePhoto = async () => {
-    try {
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [4, 3],
-        quality: 1,
-      });
-
-      if (!result.canceled) {
-        setImage(result.assets[0].uri);
-        await predict(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Error taking photo:', error);
-      Alert.alert('Error', 'Failed to take photo');
+# Categories and their recycling instructions
+CATEGORIES = {
+    'plastic': {
+        'instructions': [
+            'Rinse container thoroughly',
+            'Remove caps and labels',
+            'Check for recycling number (1-7)',
+            'Crush if possible to save space'
+        ],
+        'examples': 'Bottles, containers, packaging'
+    },
+    'paper': {
+        'instructions': [
+            'Keep dry and clean',
+            'Remove any plastic wrapping',
+            'Flatten boxes',
+            'Remove any tape or staples'
+        ],
+        'examples': 'Newspapers, cardboard, magazines'
+    },
+    'metal': {
+        'instructions': [
+            'Clean the item thoroughly',
+            'Remove any non-metal parts',
+            'Crush cans to save space',
+            'Check if item is magnetic (steel) or not (aluminum)'
+        ],
+        'examples': 'Cans, foil, bottle caps'
+    },
+    'glass': {
+        'instructions': [
+            'Rinse thoroughly',
+            'Remove caps and lids',
+            'Separate by color if required',
+            'Do not break intentionally'
+        ],
+        'examples': 'Bottles, jars, containers'
+    },
+    'organic': {
+        'instructions': [
+            'Remove any packaging',
+            'Cut large items into smaller pieces',
+            'Keep separate from non-organic waste',
+            'Compost if possible'
+        ],
+        'examples': 'Food waste, garden waste, wood'
+    },
+    'ewaste': {
+        'instructions': [
+            'Remove batteries if possible',
+            'Keep intact - do not break',
+            'Store in dry place',
+            'Take to designated e-waste center'
+        ],
+        'examples': 'Electronics, batteries, cables'
+    },
+    'others': {
+        'instructions': [
+            'Check local recycling guidelines',
+            'Consider if item can be reused',
+            'Separate different materials if possible',
+            'When in doubt, ask recycling center'
+        ],
+        'examples': 'Mixed materials, unknown items'
     }
-  };
-
-  const predict = async (uri) => {
-    try {
-      setIsProcessing(true);
-      console.log('Starting prediction for:', uri);  // Debug log
-
-      // Create form data
-      const formData = new FormData();
-      formData.append('image', {
-        uri: uri,
-        type: 'image/jpeg',
-        name: 'photo.jpg',
-      });
-
-      console.log('Sending to server:', API_URL);  // Debug log
-
-      // Send to server
-      const response = await fetch(API_URL, {
-        method: 'POST',
-        body: formData,
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
-
-      console.log('Response status:', response.status);  // Debug log
-      const text = await response.text();
-      console.log('Response text:', text);  // Debug log
-
-      try {
-        const data = JSON.parse(text);
-        if (data.success) {
-          Alert.alert(
-            'Recycling Analysis',
-            `This item is: ${data.category}\n\nConfidence: ${(data.confidence * 100).toFixed(1)}%\n\nRecycling Instructions:\n• Clean the item\n• Remove any labels or caps\n• Place in ${data.category} recycling bin`
-          );
-        } else {
-          throw new Error(data.error || 'Failed to analyze image');
-        }
-      } catch (parseError) {
-        console.error('JSON parse error:', parseError);  // Debug log
-        throw new Error('Invalid response from server');
-      }
-
-    } catch (error) {
-      console.error('Prediction error:', error);
-      Alert.alert('Error', 'Failed to analyze image');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  return (
-    <View style={styles.container}>
-      <TouchableOpacity 
-        style={styles.cameraButton} 
-        onPress={takePhoto}
-        disabled={isProcessing}
-      >
-        <Text style={styles.cameraButtonText}>
-          {isProcessing ? 'Processing...' : 'Take Photo'}
-        </Text>
-      </TouchableOpacity>
-
-      {image && (
-        <View style={styles.imageContainer}>
-          <Image source={{ uri: image }} style={styles.image} />
-          {isProcessing && (
-            <View style={styles.processingContainer}>
-              <Text style={styles.processingText}>Analyzing image...</Text>
-            </View>
-          )}
-        </View>
-      )}
-    </View>
-  );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 20,
-    backgroundColor: '#fff',
-  },
-  cameraButton: {
-    backgroundColor: '#4CAF50',
-    paddingVertical: 15,
-    paddingHorizontal: 30,
-    borderRadius: 25,
-    marginBottom: 20,
-  },
-  cameraButtonText: {
-    color: 'white',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  imageContainer: {
-    alignItems: 'center',
-  },
-  image: {
-    width: 300,
-    height: 300,
-    borderRadius: 10,
-    marginBottom: 10,
-  },
-  processingContainer: {
-    position: 'absolute',
-    top: '50%',
-    backgroundColor: 'rgba(0,0,0,0.7)',
-    padding: 15,
-    borderRadius: 10,
-  },
-  processingText: {
-    color: 'white',
-    fontSize: 16,
-  }
-});
+@app.route('/', methods=['GET'])
+def home():
+    return "Recycling Classification Server is Running!"
+
+@app.route('/predict', methods=['POST'])
+def predict():
+    print("Received prediction request")
+    try:
+        if 'image' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No image file provided'
+            })
+
+        file = request.files['image']
+        print(f"Received file: {file.filename}")
+        
+        # For now, return test prediction (later will connect to your model)
+        category = 'plastic'  # This will be replaced with actual model prediction
+        return jsonify({
+            'success': True,
+            'category': category,
+            'confidence': 0.95,
+            'instructions': CATEGORIES[category]['instructions'],
+            'examples': CATEGORIES[category]['examples']
+        })
+        
+    except Exception as e:
+        print(f"Error: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        })
+
+if __name__ == '__main__':
+    app.run(debug=True)
