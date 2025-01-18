@@ -1,5 +1,4 @@
 from flask import Flask, request, jsonify
-import tensorflow as tf
 import numpy as np
 from PIL import Image
 import io
@@ -13,22 +12,23 @@ def home():
 @app.route('/predict', methods=['POST'])
 def predict():
     try:
+        if 'image' not in request.files:
+            return jsonify({
+                'success': False,
+                'error': 'No image file provided'
+            })
+
         file = request.files['image']
-        # Convert image to RGB format
         image = Image.open(io.BytesIO(file.read())).convert('RGB')
-        # Resize to match your model's input size
         image = image.resize((299, 299))  # Xception size
         
-        # Convert to array and normalize
-        img_array = np.array(image) / 255.0
-        img_array = np.expand_dims(img_array, axis=0)
-        
-        # For now, return a dummy response
+        # For now, return dummy prediction
         categories = ['plastic', 'paper', 'metal', 'glass', 'organic', 'ewaste', 'others']
+        
         return jsonify({
-            'category': 'plastic',  # We'll update this with real predictions later
-            'confidence': 0.95,
-            'success': True
+            'success': True,
+            'category': 'plastic',  # Replace with actual prediction later
+            'confidence': 0.95
         })
         
     except Exception as e:
@@ -38,4 +38,4 @@ def predict():
         })
 
 if __name__ == '__main__':
-    app.run()
+    app.run(debug=True)
