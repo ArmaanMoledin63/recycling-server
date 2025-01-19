@@ -26,7 +26,6 @@ except Exception as e:
     print("Current directory contents:", os.listdir('.'))
     interpreter = None
 
-# Categories matching your model's output
 CATEGORIES = {
     'Cardboard': {
         'instructions': [
@@ -112,9 +111,16 @@ def predict():
         
         # Process image
         image = Image.open(io.BytesIO(file.read())).convert('RGB')
-        image = image.resize((299, 299))  # Xception input size
-        image_array = np.array(image, dtype=np.float32) / 255.0
+        # Resize to match exactly what your model expects
+        image = image.resize((299, 299), Image.LANCZOS)
+        # Convert to numpy array and preprocess
+        image_array = np.array(image, dtype=np.float32)
+        # Normalize to [-1, 1] range instead of [0, 1]
+        image_array = (image_array - 127.5) / 127.5
         image_array = np.expand_dims(image_array, axis=0)
+        
+        print("Image shape:", image_array.shape)
+        print("Image range:", np.min(image_array), "to", np.max(image_array))
 
         if interpreter is None:
             print("Model not loaded, using fallback")
