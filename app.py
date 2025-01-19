@@ -11,34 +11,39 @@ CORS(app)
 
 print("Starting server...")
 print("Current working directory:", os.getcwd())
+print("Files in directory:", os.listdir())
 
-# Load the TFLite model
+# Load the TFLite model with more error checking
 try:
-    print("Attempting to load model from: recycling_model.tflite")
+    print("\nAttempting to load model...")
     model_path = "recycling_model.tflite"
+    
+    # Check if file exists
     if os.path.exists(model_path):
-        print(f"Model file found! Size: {os.path.getsize(model_path)} bytes")
+        print(f"Model file found! Size: {os.path.getsize(model_path) / (1024*1024):.2f} MB")
+        interpreter = tf.lite.Interpreter(model_path=model_path)
+        interpreter.allocate_tensors()
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+        print("Model loaded successfully!")
+        print("Input details:", input_details)
+        print("Output details:", output_details)
     else:
         print("Model file not found!")
-        print("Files in directory:", os.listdir())
-    
-    interpreter = tf.lite.Interpreter(model_path=model_path)
-    interpreter.allocate_tensors()
-    input_details = interpreter.get_input_details()
-    output_details = interpreter.get_output_details()
-    print("Model loaded successfully!")
-    print("Input details:", input_details)
-    print("Output details:", output_details)
+        print("Current directory contents:", os.listdir())
+        interpreter = None
 except Exception as e:
     print(f"Error loading model: {str(e)}")
-    print("Files in current directory:", os.listdir('.'))
+    import traceback
+    traceback.print_exc()
     interpreter = None
 
-# Categories should be in the exact order as training
+# Categories should match your training exactly
 CATEGORIES = [
     'Cardboard', 'Food_Waste', 'Glass', 'Metal', 'Paper', 'Plastic', 'Other'
 ]
 
+# Instructions for each category
 INSTRUCTIONS = {
     'Cardboard': {
         'instructions': [
@@ -117,6 +122,9 @@ def home():
 def predict():
     print("\nReceived prediction request")
     try:
+        if interpreter is None:
+            raise Exception("Model not loaded properly")
+
         if 'image' not in request.files:
             return jsonify({
                 'success': False,
@@ -126,19 +134,15 @@ def predict():
         file = request.files['image']
         print(f"Processing file: {file.filename}")
         
-        # Process image exactly like training
+        # Process image
         image = Image.open(io.BytesIO(file.read())).convert('RGB')
         image = image.resize((299, 299))
-        image_array = np.array(image)
-        image_array = image_array.astype('float32')
-        image_array /= 255.
+        image_array = np.array(image, dtype=np.float32)
+        image_array = image_array / 255.0
         image_array = np.expand_dims(image_array, axis=0)
         
         print(f"Processed image shape: {image_array.shape}")
         print(f"Image value range: {image_array.min()} to {image_array.max()}")
-
-        if interpreter is None:
-            raise Exception("Model not loaded properly")
 
         print("Setting tensor data...")
         interpreter.set_tensor(input_details[0]['index'], image_array)
