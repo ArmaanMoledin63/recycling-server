@@ -9,6 +9,9 @@ import os
 app = Flask(__name__)
 CORS(app)
 
+# Add confidence threshold
+CONFIDENCE_THRESHOLD = 0.70  # 70% confidence threshold
+
 print("Starting server...")
 print("Current working directory:", os.getcwd())
 print("Files in directory:", os.listdir())
@@ -107,6 +110,17 @@ INSTRUCTIONS = {
             'When in doubt, ask recycling center'
         ],
         'examples': 'Mixed materials, uncommon items'
+    },
+    'Uncertain': {
+        'instructions': [
+            'Try taking another photo with:',
+            '- Better lighting',
+            '- Different angle',
+            '- Less background clutter',
+            '- Closer to the item',
+            'Or consult your local recycling guidelines'
+        ],
+        'examples': 'Item needs clearer image for classification'
     }
 }
 
@@ -158,11 +172,36 @@ def predict():
         for i, conf in enumerate(predictions[0]):
             print(f"{CATEGORIES[i]}: {conf * 100:.2f}%")
         
+        # Get top 2 predictions
+        top_2_indices = np.argsort(predictions[0])[-2:][::-1]
+        top_2_confidences = predictions[0][top_2_indices]
+        
         # Get highest confidence prediction
-        predicted_class = np.argmax(predictions[0])
-        confidence = float(predictions[0][predicted_class])
+        predicted_class = top_2_indices[0]
+        confidence = float(top_2_confidences[0])
         category = CATEGORIES[predicted_class]
+        
         print(f"\nFinal prediction: {category} with confidence: {confidence * 100:.2f}%")
+        
+        # If confidence is below threshold or top 2 predictions are close
+        if confidence < CONFIDENCE_THRESHOLD or (top_2_confidences[0] - top_2_confidences[1]) < 0.15:
+            return jsonify({
+                'success': True,
+                'category': 'Uncertain',
+                'confidence': confidence,
+                'instructions': [
+                    f'This item could be either:',
+                    f'1. {CATEGORIES[top_2_indices[0]]} ({(top_2_confidences[0] * 100):.1f}%)',
+                    f'2. {CATEGORIES[top_2_indices[1]]} ({(top_2_confidences[1] * 100):.1f}%)',
+                    '',
+                    'Tips for better classification:',
+                    '- Try better lighting',
+                    '- Different angle',
+                    '- Less background clutter',
+                    '- Get closer to the item'
+                ],
+                'examples': 'Multiple possible categories detected'
+            })
         
         return jsonify({
             'success': True,
