@@ -10,11 +10,19 @@ app = Flask(__name__)
 CORS(app)
 
 print("Starting server...")
+print("Current working directory:", os.getcwd())
 
 # Load the TFLite model
 try:
-    print("Attempting to load model...")
-    interpreter = tf.lite.Interpreter(model_path="recycling_model.tflite")
+    print("Attempting to load model from: recycling_model.tflite")
+    model_path = "recycling_model.tflite"
+    if os.path.exists(model_path):
+        print(f"Model file found! Size: {os.path.getsize(model_path)} bytes")
+    else:
+        print("Model file not found!")
+        print("Files in directory:", os.listdir())
+    
+    interpreter = tf.lite.Interpreter(model_path=model_path)
     interpreter.allocate_tensors()
     input_details = interpreter.get_input_details()
     output_details = interpreter.get_output_details()
@@ -23,10 +31,15 @@ try:
     print("Output details:", output_details)
 except Exception as e:
     print(f"Error loading model: {str(e)}")
-    print("Current directory contents:", os.listdir('.'))
+    print("Files in current directory:", os.listdir('.'))
     interpreter = None
 
-CATEGORIES = {
+# Categories should be in the exact order as training
+CATEGORIES = [
+    'Cardboard', 'Food_Waste', 'Glass', 'Metal', 'Paper', 'Plastic', 'Other'
+]
+
+INSTRUCTIONS = {
     'Cardboard': {
         'instructions': [
             'Flatten all boxes',
@@ -94,11 +107,15 @@ CATEGORIES = {
 
 @app.route('/', methods=['GET'])
 def home():
-    return "Recycling Classification Server is Running!"
+    return jsonify({
+        "status": "Recycling Classification Server is Running!",
+        "model_loaded": interpreter is not None,
+        "categories": CATEGORIES
+    })
 
 @app.route('/predict', methods=['POST'])
 def predict():
-    print("Received prediction request")
+    print("\nReceived prediction request")
     try:
         if 'image' not in request.files:
             return jsonify({
@@ -109,54 +126,52 @@ def predict():
         file = request.files['image']
         print(f"Processing file: {file.filename}")
         
-        # Process image
+        # Process image exactly like training
         image = Image.open(io.BytesIO(file.read())).convert('RGB')
-        # Resize to match exactly what your model expects
-        image = image.resize((299, 299), Image.LANCZOS)
-        # Convert to numpy array and preprocess
-        image_array = np.array(image, dtype=np.float32)
-        # Normalize to [-1, 1] range instead of [0, 1]
-        image_array = (image_array - 127.5) / 127.5
+        image = image.resize((299, 299))
+        image_array = np.array(image)
+        image_array = image_array.astype('float32')
+        image_array /= 255.
         image_array = np.expand_dims(image_array, axis=0)
         
-        print("Image shape:", image_array.shape)
-        print("Image range:", np.min(image_array), "to", np.max(image_array))
+        print(f"Processed image shape: {image_array.shape}")
+        print(f"Image value range: {image_array.min()} to {image_array.max()}")
 
         if interpreter is None:
-            print("Model not loaded, using fallback")
-            category = list(CATEGORIES.keys())[0]
-            confidence = 0.95
-        else:
-            print("Making prediction with model")
-            # Set the input tensor
-            interpreter.set_tensor(input_details[0]['index'], image_array)
-            # Run inference
-            interpreter.invoke()
-            # Get predictions
-            predictions = interpreter.get_tensor(output_details[0]['index'])
-            
-            # Print all predictions
-            all_categories = list(CATEGORIES.keys())
-            print("\nAll predictions:")
-            for i, conf in enumerate(predictions[0]):
-                print(f"{all_categories[i]}: {conf * 100:.2f}%")
-            
-            # Get the highest confidence prediction
-            predicted_class = np.argmax(predictions[0])
-            confidence = float(predictions[0][predicted_class])
-            category = all_categories[predicted_class]
-            print(f"\nFinal prediction: {category} with confidence: {confidence * 100:.2f}%")
+            raise Exception("Model not loaded properly")
+
+        print("Setting tensor data...")
+        interpreter.set_tensor(input_details[0]['index'], image_array)
+        
+        print("Running inference...")
+        interpreter.invoke()
+        
+        print("Getting predictions...")
+        predictions = interpreter.get_tensor(output_details[0]['index'])
+        
+        # Print all predictions
+        print("\nAll predictions:")
+        for i, conf in enumerate(predictions[0]):
+            print(f"{CATEGORIES[i]}: {conf * 100:.2f}%")
+        
+        # Get highest confidence prediction
+        predicted_class = np.argmax(predictions[0])
+        confidence = float(predictions[0][predicted_class])
+        category = CATEGORIES[predicted_class]
+        print(f"\nFinal prediction: {category} with confidence: {confidence * 100:.2f}%")
         
         return jsonify({
             'success': True,
             'category': category,
             'confidence': confidence,
-            'instructions': CATEGORIES[category]['instructions'],
-            'examples': CATEGORIES[category]['examples']
+            'instructions': INSTRUCTIONS[category]['instructions'],
+            'examples': INSTRUCTIONS[category]['examples']
         })
         
     except Exception as e:
         print(f"Error during prediction: {str(e)}")
+        import traceback
+        traceback.print_exc()
         return jsonify({
             'success': False,
             'error': str(e)
