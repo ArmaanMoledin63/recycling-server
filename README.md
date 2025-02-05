@@ -130,6 +130,7 @@ The server uses an Xception-based TensorFlow Lite model optimized for recycling 
 - Accepts 299x299 RGB images
 - Provides confidence scores for 7 categories
 - Is optimized for mobile and edge deployment
+- Accuracy: 97%
 
 ## Security Notes
 
