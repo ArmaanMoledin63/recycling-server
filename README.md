@@ -137,10 +137,4 @@ The server uses an Xception-based TensorFlow Lite model optimized for recycling 
 - Input validation is implemented for file uploads
 - Error messages are sanitized for production use
 
-## License
 
-[Add your license information here]
-
-## Contributing
-
-[Add contribution guidelines here]
