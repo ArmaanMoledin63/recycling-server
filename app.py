@@ -19,7 +19,7 @@ print("Files in directory:", os.listdir())
 # Load the TFLite model with more error checking
 try:
     print("\nAttempting to load model...")
-    model_path = "recycling_model.tflite"
+    model_path = "Xception5MarchTensor.tflite"
     
     # Check if file exists
     if os.path.exists(model_path):
@@ -43,7 +43,7 @@ except Exception as e:
 
 # Categories should match your training exactly
 CATEGORIES = [
-    'Cardboard', 'Food_Waste', 'Glass', 'Metal', 'Paper', 'Plastic', 'Other'
+    'Cardboard', 'Food_Waste', 'Glass', 'Metal', 'Paper', 'Plastic', 'Other', 'Wood'
 ]
 
 # Instructions for each category
@@ -101,7 +101,21 @@ INSTRUCTIONS = {
             'Crush to save space'
         ],
         'examples': 'Bottles, containers, packaging'
+    
     },
+
+    'Wood': {
+        'instructions': [
+            'Check local disposal guidelines',
+            'Reuse if possible (DIY projects, donations)',
+            'Separate treated and untreated wood',
+            'Break down large pieces for easier disposal',
+            'Use designated wood recycling facilities',
+            'Dispose of treated wood at hazardous waste facilities'
+        ],
+        'examples': 'Furniture, plywood, pallets, branches'
+},
+
     'Other': {
         'instructions': [
             'Check local guidelines',
